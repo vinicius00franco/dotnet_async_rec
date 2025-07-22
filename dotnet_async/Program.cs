@@ -81,7 +81,7 @@ async Task ProcessarConsultasDeVoosAsync()
 
 await ProcessarConsultasDeVoosAsync();
 
-async Task ComprarPassagemAsync()
+async Task ComprarPassagemAsync() { await Task.CompletedTask; }
 {
     var compraPassagemRequest = new CompraPassagemRequest() {Origem="Vitória",Destino="Belém",Milhas =1000 };
 

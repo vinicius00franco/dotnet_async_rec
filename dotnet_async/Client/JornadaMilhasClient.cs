@@ -18,12 +18,12 @@ public class JornadaMilhasClient
     public async Task<IEnumerable<Voo>> ConsultarVoosAsync(CancellationToken token=default)
     {
         HttpResponseMessage response = await client.GetAsync("/Voos",token);
-        return await response.Content.ReadFromJsonAsync<IEnumerable<Voo>>();
+        return await response.Content.ReadFromJsonAsync<IEnumerable<Voo>>() ?? Enumerable.Empty<Voo>();
     }
 
     public async Task<string> ComprarPassagemAsync( CompraPassagemRequest request)
     {
-        return await client.PostAsJsonAsync("/Voos/comprar", request).Result.Content.ReadFromJsonAsync<string>();
+        return await client.PostAsJsonAsync("/Voos/comprar", request).Result.Content.ReadFromJsonAsync<string>() ?? string.Empty;
 
     }
 
