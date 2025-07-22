@@ -54,7 +54,7 @@
 using dotnet_async.Client;
 using dotnet_async.Modelos;
 
-var client = new JornadaMilhasClient(new JornadaMilhasClientFactory().CreateClient());
+var client = new FlightServiceClient(new JornadaMilhasClientFactory().CreateClient());
 
 async Task ProcessarConsultasDeVoosAsync()
 {
@@ -64,7 +64,7 @@ async Task ProcessarConsultasDeVoosAsync()
 
         tokenSource.Cancel();
 
-        var voos = await client.ConsultarVoosAsync(tokenSource.Token);
+        var voos = await client.GetFlightsAsync(tokenSource.Token);
 
         foreach (var voo in voos)
         {
@@ -85,7 +85,7 @@ async Task ComprarPassagemAsync() { await Task.CompletedTask; }
 {
     var compraPassagemRequest = new CompraPassagemRequest() {Origem="Vitória",Destino="Belém",Milhas =1000 };
 
-    var resultado = client.ComprarPassagemAsync(compraPassagemRequest);
+    var resultado = client.PurchaseTicketAsync(compraPassagemRequest);
 
     Console.WriteLine(resultado.Result);
 }
