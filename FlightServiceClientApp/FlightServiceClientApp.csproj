@@ -20,4 +20,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\FlightServiceApi\FlightServiceApi.csproj" />
+  </ItemGroup>
+
 </Project>

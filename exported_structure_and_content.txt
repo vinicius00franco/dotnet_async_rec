@@ -77,6 +77,44 @@ Accept: application/json
 
 ###
 
+@api_host = http://localhost:5125
+
+### Teste 1: Verificar se a API está online
+GET {{api_host}}/Hello
+Accept: application/json
+
+### Teste 2: Listar todos os voos disponíveis
+GET {{api_host}}/voos
+Accept: application/json
+
+### Teste 3: Obter um voo específico por ID (voo existente)
+GET {{api_host}}/voos/1
+Accept: application/json
+
+### Teste 4: Tentar obter um voo por ID que não existe (espera 404 Not Found)
+GET {{api_host}}/voos/999
+Accept: application/json
+
+### Teste 5: Simular a compra de uma passagem com sucesso
+POST {{api_host}}/voos/comprar
+Content-Type: application/json
+
+{
+  "origem": "Vitória",
+  "destino": "São Paulo",
+  "milhas": 15000
+}
+
+### Teste 6: Simular a compra de outra passagem
+POST {{api_host}}/voos/comprar
+Content-Type: application/json
+
+{
+  "origem": "Salvador",
+  "destino": "Florianópolis",
+  "milhas": 20000
+}
+
 --- FlightServiceApi/Context/JornadaMilhasContext.cs ---
 ﻿using dotnet_async_api.Modelos;
 using Microsoft.EntityFrameworkCore;
@@ -266,6 +304,10 @@ Conteúdo dos arquivos em FlightServiceClientApp:
     <None Update="voos.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../FlightServiceApi/FlightServiceApi.csproj" />
   </ItemGroup>
 
 </Project>

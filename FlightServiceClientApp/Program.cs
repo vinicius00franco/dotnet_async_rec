@@ -51,8 +51,8 @@
 //Console.ReadKey();
 #endregion
 
-using dotnet_async.Client;
-using dotnet_async.Modelos;
+using dotnet_async.Clients;
+using dotnet_async_api.Modelos;
 
 var client = new FlightServiceClient(new JornadaMilhasClientFactory().CreateClient());
 
