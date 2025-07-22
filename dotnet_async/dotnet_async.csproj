@@ -8,6 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+<<<<<<< HEAD
+=======
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+>>>>>>> aula05-video5.3
     <None Update="voos.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

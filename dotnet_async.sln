@@ -5,6 +5,8 @@ VisualStudioVersion = 17.9.34622.214
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnet_async", "dotnet_async\dotnet_async.csproj", "{C4A22C18-BD41-4498-B78A-7CBD502348E1}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnet_async_api", "dotnet_async_api\dotnet_async_api.csproj", "{D72E85B5-7705-410E-BC0B-EC5B61E6979C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{C4A22C18-BD41-4498-B78A-7CBD502348E1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C4A22C18-BD41-4498-B78A-7CBD502348E1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C4A22C18-BD41-4498-B78A-7CBD502348E1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D72E85B5-7705-410E-BC0B-EC5B61E6979C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D72E85B5-7705-410E-BC0B-EC5B61E6979C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D72E85B5-7705-410E-BC0B-EC5B61E6979C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D72E85B5-7705-410E-BC0B-EC5B61E6979C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
