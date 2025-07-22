@@ -1,0 +1,449 @@
+Estrutura de diret√≥rios de FlightServiceApi:
+FlightServiceApi
+FlightServiceApi/appsettings.json
+FlightServiceApi/Properties
+FlightServiceApi/Properties/launchSettings.json
+FlightServiceApi/dotnet_async_api.http
+FlightServiceApi/Context
+FlightServiceApi/Context/JornadaMilhasContext.cs
+FlightServiceApi/Modelos
+FlightServiceApi/Modelos/CompraPassagemRequest.cs
+FlightServiceApi/Modelos/Voo.cs
+FlightServiceApi/appsettings.Development.json
+FlightServiceApi/Program.cs
+FlightServiceApi/FlightServiceApi.csproj
+
+Conte√∫do dos arquivos em FlightServiceApi:
+
+--- FlightServiceApi/appsettings.json ---
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+
+--- FlightServiceApi/Properties/launchSettings.json ---
+Ôªø{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:33427",
+      "sslPort": 44351
+    }
+  },
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5125",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "https": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "https://localhost:7125;http://localhost:5125",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
+
+--- FlightServiceApi/dotnet_async_api.http ---
+@dotnet_async_api_HostAddress = http://localhost:5125
+
+GET {{dotnet_async_api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+--- FlightServiceApi/Context/JornadaMilhasContext.cs ---
+Ôªøusing dotnet_async_api.Modelos;
+using Microsoft.EntityFrameworkCore;
+
+namespace dotnet_async_api.Context;
+
+public class JornadaMilhasContext:DbContext
+{
+
+    public JornadaMilhasContext(DbContextOptions<JornadaMilhasContext> options):base(options)
+    {
+        
+    }
+
+    public DbSet<Voo> Voos { get; set; }
+
+}
+
+--- FlightServiceApi/Modelos/CompraPassagemRequest.cs ---
+Ôªønamespace dotnet_async_api.Modelos;
+
+public record CompraPassagemRequest
+{
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int Milhas { get; set; }
+}
+
+--- FlightServiceApi/Modelos/Voo.cs ---
+Ôªønamespace dotnet_async_api.Modelos;
+
+public class Voo
+{
+    public int Id { get; set; }
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int Preco { get; set; }
+    public int MilhasNecessarias { get; set; }
+
+    public override string ToString()
+    {
+        return $"Voo {Id} - Origem: {Origem}, Destino: {Destino}, Pre√ßo: {Preco}, Milhas Necess√°rias: {MilhasNecessarias}";
+    }
+}
+
+--- FlightServiceApi/appsettings.Development.json ---
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}
+
+--- FlightServiceApi/Program.cs ---
+using dotnet_async_api.Context;
+using dotnet_async_api.Modelos;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Runtime.InteropServices;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<JornadaMilhasContext>(options => options.UseInMemoryDatabase("JornadaMilhasVoos"));
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<JornadaMilhasContext>();
+
+    // Carga de dados inicial
+    context.Voos.AddRange(
+        new Voo { Id = 1, Origem = "Brasilia", Destino = "Recife", Preco = 2000, MilhasNecessarias = 10000 },
+            new Voo { Id = 2, Origem = "VitÛria", Destino = "S„o Paulo", Preco = 2500, MilhasNecessarias = 15000 },
+            new Voo { Id = 3, Origem = "Salvador", Destino = "FlorianÛpolis", Preco = 3000, MilhasNecessarias = 20000 }
+    );
+    context.SaveChanges();
+}
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+
+app.MapGet("/Hello", async () => {
+
+    await Task.FromResult("Hello World! - API online.");
+    
+    }).WithTags("Voos").WithSummary("VerificaÁ„o do status 'Online'").WithOpenApi();
+
+app.MapGet("/voos", async ([FromServices]JornadaMilhasContext context, CancellationToken token = default) => {
+    try
+    {
+        token.ThrowIfCancellationRequested();
+        var voos = await context.Voos.ToListAsync(token);
+        return Results.Ok(voos);
+    }
+    catch (OperationCanceledException ex)
+    {
+
+        return Results.Problem($"OperaÁ„o cancelada: {ex.Message}");
+    }   
+
+}).WithTags("Voos").WithSummary("Lista os vÙos cadastrados.").WithOpenApi();
+
+app.MapGet("/voos/{id}", async ([FromServices] JornadaMilhasContext context, int id) => {
+
+    var voo = await context.Voos.FindAsync(id);
+    if (voo == null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(voo);
+
+});
+
+app.MapPost("/voos/comprar",async([FromServices]JornadaMilhasContext context, [FromBody] CompraPassagemRequest request) =>
+{
+    var mensagemCompra = $"Passagem comprada origem: {request.Origem} com destino: {request.Destino} com milhas {request.Milhas}";
+    return Results.Ok(await Task.FromResult(mensagemCompra));
+
+}).WithTags("Voos").WithSummary("Simula a compra de passagem").WithOpenApi();
+
+app.Run();
+--- FlightServiceApi/FlightServiceApi.csproj ---
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+  </ItemGroup>
+
+</Project>
+Estrutura de diret√≥rios de FlightServiceClientApp:
+FlightServiceClientApp
+FlightServiceClientApp/FlightServiceClientApp.csproj
+FlightServiceClientApp/voos.txt
+FlightServiceClientApp/Program.cs
+FlightServiceClientApp/src
+FlightServiceClientApp/src/Tickets
+FlightServiceClientApp/src/Tickets/CompraPassagemRequest.cs
+FlightServiceClientApp/src/Flights
+FlightServiceClientApp/src/Flights/Voo.cs
+FlightServiceClientApp/src/Flights/FlightServiceClient.cs
+FlightServiceClientApp/src/Factories
+FlightServiceClientApp/src/Factories/JornadaMilhasClientFactory.cs
+FlightServiceClientApp/src/Clients
+FlightServiceClientApp/src/Clients/FlightServiceClient.cs
+
+Conte√∫do dos arquivos em FlightServiceClientApp:
+
+--- FlightServiceClientApp/FlightServiceClientApp.csproj ---
+Ôªø<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/Controllers/**/*.cs" />
+    <Compile Include="src/Services/**/*.cs" />
+    <Compile Include="src/Repositories/**/*.cs" />
+    <Compile Include="src/Models/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="voos.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
+
+--- FlightServiceClientApp/voos.txt ---
+1;Brasilia;Recife;2000;10000
+2;VitÛria;S„o Paulo;2500;15000
+3;Salvador;FlorianÛpolis;3000;20000
+4;Rio de Janeiro;Curitiba;1800;12000
+5;Fortaleza;Belo Horizonte;2200;13000
+6;S„o Paulo;Rio de Janeiro;400;8000
+7;BrasÌlia;Salvador;1500;9500
+8;Manaus;Curitiba;3500;11500
+9;Recife;Porto Alegre;2900;10500
+10;Goi‚nia;BelÈm;1700;8700
+11;Rio de Janeiro;BrasÌlia;1200;9000
+12;S„o LuÌs;Fortaleza;800;7500
+13;Belo Horizonte;Manaus;3200;11000
+14;Curitiba;Goi‚nia;1800;8800
+--- FlightServiceClientApp/Program.cs ---
+Ôªø#region Programa√ß√£o Ass√≠ncrona
+//object chave = new object();
+//Task<string> conteudoTask;
+//lock(chave)
+//{
+//    conteudoTask = Task.Run(() => File.ReadAllTextAsync("voos.txt"));
+//}
+//async Task LerArquivoAsync(CancellationToken token)
+//{
+//    try
+//    {
+//        await Task.Delay(new Random().Next(300, 8000));
+//        token.ThrowIfCancellationRequested();
+//        Console.WriteLine($"Conte√∫do: \n{conteudoTask.Result}");
+
+//    }
+//    catch (OperationCanceledException ex)
+//    {
+//       Console.WriteLine($"Tarefa cancelada: {ex.Message}");
+//    }
+//    catch (AggregateException ex)
+//    {
+//        Console.WriteLine($"Aconteceu o erro: {ex.InnerException.Message}");
+//    }
+
+//}
+
+//async Task ExibirRelatorioAsync(CancellationToken token)
+//{
+//	try
+//	{
+//        Console.WriteLine("Executando relat√≥rio de compra de passagens!");
+//        await Task.Delay(new Random().Next(300, 8000));
+//        token.ThrowIfCancellationRequested();
+//    }
+//	catch(OperationCanceledException ex)
+//	{
+
+//        Console.WriteLine($"Tarefa cancelada: {ex.Message}");
+//	}
+
+//}
+
+//CancellationTokenSource tokenDeCancelamento = new CancellationTokenSource();
+
+//Task tarefa= Task.WhenAll(LerArquivoAsync(tokenDeCancelamento.Token), ExibirRelatorioAsync(tokenDeCancelamento.Token));
+
+//await Task.Delay(1000).ContinueWith(_ => tokenDeCancelamento.Cancel());
+
+//Console.WriteLine("Outras opera√ß√µes.");
+//Console.ReadKey();
+#endregion
+
+using dotnet_async.Client;
+using dotnet_async.Modelos;
+
+var client = new FlightServiceClient(new JornadaMilhasClientFactory().CreateClient());
+
+async Task ProcessarConsultasDeVoosAsync()
+{
+    try
+    {
+        CancellationTokenSource tokenSource = new CancellationTokenSource();
+
+        tokenSource.Cancel();
+
+        var voos = await client.GetFlightsAsync(tokenSource.Token);
+
+        foreach (var voo in voos)
+        {
+            Console.WriteLine(voo);
+        }
+    }
+    catch (Exception ex)
+    {
+
+        Console.WriteLine($"tarefa cancelada: {ex.Message}");
+    }
+    
+}
+
+await ProcessarConsultasDeVoosAsync();
+
+async Task ComprarPassagemAsync() { await Task.CompletedTask; }
+{
+    var compraPassagemRequest = new CompraPassagemRequest() {Origem="Vit√≥ria",Destino="Bel√©m",Milhas =1000 };
+
+    var resultado = client.PurchaseTicketAsync(compraPassagemRequest);
+
+    Console.WriteLine(resultado.Result);
+}
+
+await ComprarPassagemAsync();
+--- FlightServiceClientApp/src/Tickets/CompraPassagemRequest.cs ---
+// Original content of CompraPassagemRequest.cs moved here.
+
+--- FlightServiceClientApp/src/Flights/Voo.cs ---
+// Original content of Voo.cs moved here.
+
+--- FlightServiceClientApp/src/Flights/FlightServiceClient.cs ---
+using dotnet_async.Modelos;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http.Json;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace dotnet_async.Flights;
+public class FlightServiceClient
+{
+    private HttpClient client;
+    public FlightServiceClient(HttpClient client)
+    {
+        this.client = client;
+    }
+
+    public async Task<IEnumerable<Voo>> GetFlightsAsync(CancellationToken token=default)
+    {
+        HttpResponseMessage response = await client.GetAsync("/Voos",token);
+        return await response.Content.ReadFromJsonAsync<IEnumerable<Voo>>() ?? Enumerable.Empty<Voo>();
+    }
+
+    public async Task<string> PurchaseTicketAsync(CompraPassagemRequest request)
+    {
+        return await client.PostAsJsonAsync("/Voos/comprar", request).Result.Content.ReadFromJsonAsync<string>() ?? string.Empty;
+    }
+}
+
+--- FlightServiceClientApp/src/Factories/JornadaMilhasClientFactory.cs ---
+// Original content of JornadaMilhasClientFactory.cs moved here.
+
+--- FlightServiceClientApp/src/Clients/FlightServiceClient.cs ---
+using dotnet_async.Modelos;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http.Json;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace dotnet_async.Clients;
+public class FlightServiceClient
+{
+    private HttpClient client;
+    public FlightServiceClient(HttpClient client)
+    {
+        this.client = client;
+    }
+
+    public async Task<IEnumerable<Voo>> GetFlightsAsync(CancellationToken token=default)
+    {
+        HttpResponseMessage response = await client.GetAsync("/Voos",token);
+        return await response.Content.ReadFromJsonAsync<IEnumerable<Voo>>() ?? Enumerable.Empty<Voo>();
+    }
+
+    public async Task<string> PurchaseTicketAsync(CompraPassagemRequest request)
+    {
+        return await client.PostAsJsonAsync("/Voos/comprar", request).Result.Content.ReadFromJsonAsync<string>() ?? string.Empty;
+    }
+}
