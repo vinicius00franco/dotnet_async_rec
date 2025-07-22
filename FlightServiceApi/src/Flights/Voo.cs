@@ -1,4 +1,4 @@
-﻿namespace dotnet_async_api.Modelos;
+﻿namespace FlightServiceApi.src.Flights;
 
 public class Voo
 {

@@ -16,7 +16,7 @@ GET {{api_host}}/voos
 Accept: application/json
 
 ### Teste 3: Obter um voo específico por ID (voo existente)
-GET {{api_host}}/voos/1
+GET {{api_host}}/voos/2
 Accept: application/json
 
 ### Teste 4: Tentar obter um voo por ID que não existe (espera 404 Not Found)

@@ -1,5 +1,6 @@
-using dotnet_async_api.Context;
-using dotnet_async_api.Modelos;
+using FlightServiceApi.src.Context;
+using FlightServiceApi.src.Flights;
+using FlightServiceApi.src.Tickets;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Runtime.InteropServices;
@@ -20,8 +21,8 @@ using (var scope = app.Services.CreateScope())
     // Carga de dados inicial
     context.Voos.AddRange(
         new Voo { Id = 1, Origem = "Brasilia", Destino = "Recife", Preco = 2000, MilhasNecessarias = 10000 },
-            new Voo { Id = 2, Origem = "Vitória", Destino = "São Paulo", Preco = 2500, MilhasNecessarias = 15000 },
-            new Voo { Id = 3, Origem = "Salvador", Destino = "Florianópolis", Preco = 3000, MilhasNecessarias = 20000 }
+            new Voo { Id = 2, Origem = "Vitï¿½ria", Destino = "Sï¿½o Paulo", Preco = 2500, MilhasNecessarias = 15000 },
+            new Voo { Id = 3, Origem = "Salvador", Destino = "Florianï¿½polis", Preco = 3000, MilhasNecessarias = 20000 }
     );
     context.SaveChanges();
 }
@@ -39,7 +40,7 @@ app.MapGet("/Hello", async () => {
 
     await Task.FromResult("Hello World! - API online.");
     
-    }).WithTags("Voos").WithSummary("Verificação do status 'Online'").WithOpenApi();
+    }).WithTags("Voos").WithSummary("Verificaï¿½ï¿½o do status 'Online'").WithOpenApi();
 
 app.MapGet("/voos", async ([FromServices]JornadaMilhasContext context, CancellationToken token = default) => {
     try
@@ -51,10 +52,10 @@ app.MapGet("/voos", async ([FromServices]JornadaMilhasContext context, Cancellat
     catch (OperationCanceledException ex)
     {
 
-        return Results.Problem($"Operação cancelada: {ex.Message}");
+        return Results.Problem($"Operaï¿½ï¿½o cancelada: {ex.Message}");
     }   
 
-}).WithTags("Voos").WithSummary("Lista os vôos cadastrados.").WithOpenApi();
+}).WithTags("Voos").WithSummary("Lista os vï¿½os cadastrados.").WithOpenApi();
 
 app.MapGet("/voos/{id}", async ([FromServices] JornadaMilhasContext context, int id) => {
 

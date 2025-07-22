@@ -1,4 +1,5 @@
-using dotnet_async_api.Modelos;
+using FlightServiceClientApp.src.Flights;
+using FlightServiceClientApp.src.Tickets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,7 +7,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace dotnet_async.Flights;
+namespace FlightServiceClientApp.src.Flights;
 public class FlightServiceClient
 {
     private HttpClient client;

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace dotnet_async.Clients;
+namespace FlightServiceClientApp.src.Factories;
 public class JornadaMilhasClientFactory : IHttpClientFactory
 {
     private string url = "http://localhost:5125";

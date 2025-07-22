@@ -1,7 +1,7 @@
-﻿using dotnet_async_api.Modelos;
+﻿using FlightServiceApi.src.Flights;
 using Microsoft.EntityFrameworkCore;
 
-namespace dotnet_async_api.Context;
+namespace FlightServiceApi.src.Context;
 
 public class JornadaMilhasContext:DbContext
 {

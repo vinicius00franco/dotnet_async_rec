@@ -1,4 +1,4 @@
-﻿namespace dotnet_async_api.Modelos;
+﻿namespace FlightServiceApi.src.Tickets;
 
 public record CompraPassagemRequest
 {

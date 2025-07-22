@@ -4,14 +4,16 @@ FlightServiceApi/appsettings.json
 FlightServiceApi/Properties
 FlightServiceApi/Properties/launchSettings.json
 FlightServiceApi/dotnet_async_api.http
-FlightServiceApi/Context
-FlightServiceApi/Context/JornadaMilhasContext.cs
-FlightServiceApi/Modelos
-FlightServiceApi/Modelos/CompraPassagemRequest.cs
-FlightServiceApi/Modelos/Voo.cs
 FlightServiceApi/appsettings.Development.json
 FlightServiceApi/Program.cs
 FlightServiceApi/FlightServiceApi.csproj
+FlightServiceApi/src
+FlightServiceApi/src/Tickets
+FlightServiceApi/src/Tickets/CompraPassagemRequest.cs
+FlightServiceApi/src/Flights
+FlightServiceApi/src/Flights/Voo.cs
+FlightServiceApi/src/Context
+FlightServiceApi/src/Context/JornadaMilhasContext.cs
 
 Conteúdo dos arquivos em FlightServiceApi:
 
@@ -115,51 +117,6 @@ Content-Type: application/json
   "milhas": 20000
 }
 
---- FlightServiceApi/Context/JornadaMilhasContext.cs ---
-﻿using dotnet_async_api.Modelos;
-using Microsoft.EntityFrameworkCore;
-
-namespace dotnet_async_api.Context;
-
-public class JornadaMilhasContext:DbContext
-{
-
-    public JornadaMilhasContext(DbContextOptions<JornadaMilhasContext> options):base(options)
-    {
-        
-    }
-
-    public DbSet<Voo> Voos { get; set; }
-
-}
-
---- FlightServiceApi/Modelos/CompraPassagemRequest.cs ---
-﻿namespace dotnet_async_api.Modelos;
-
-public record CompraPassagemRequest
-{
-    public string? Origem { get; set; }
-    public string? Destino { get; set; }
-    public int Milhas { get; set; }
-}
-
---- FlightServiceApi/Modelos/Voo.cs ---
-﻿namespace dotnet_async_api.Modelos;
-
-public class Voo
-{
-    public int Id { get; set; }
-    public string? Origem { get; set; }
-    public string? Destino { get; set; }
-    public int Preco { get; set; }
-    public int MilhasNecessarias { get; set; }
-
-    public override string ToString()
-    {
-        return $"Voo {Id} - Origem: {Origem}, Destino: {Destino}, Preço: {Preco}, Milhas Necessárias: {MilhasNecessarias}";
-    }
-}
-
 --- FlightServiceApi/appsettings.Development.json ---
 {
   "Logging": {
@@ -171,8 +128,9 @@ public class Voo
 }
 
 --- FlightServiceApi/Program.cs ---
-using dotnet_async_api.Context;
-using dotnet_async_api.Modelos;
+using FlightServiceApi.src.Context;
+using FlightServiceApi.src.Flights;
+using FlightServiceApi.src.Tickets;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Runtime.InteropServices;
@@ -193,8 +151,8 @@ using (var scope = app.Services.CreateScope())
     // Carga de dados inicial
     context.Voos.AddRange(
         new Voo { Id = 1, Origem = "Brasilia", Destino = "Recife", Preco = 2000, MilhasNecessarias = 10000 },
-            new Voo { Id = 2, Origem = "Vit�ria", Destino = "S�o Paulo", Preco = 2500, MilhasNecessarias = 15000 },
-            new Voo { Id = 3, Origem = "Salvador", Destino = "Florian�polis", Preco = 3000, MilhasNecessarias = 20000 }
+            new Voo { Id = 2, Origem = "Vit�ria", Destino = "S�o Paulo", Preco = 2500, MilhasNecessarias = 15000 },
+            new Voo { Id = 3, Origem = "Salvador", Destino = "Florian�polis", Preco = 3000, MilhasNecessarias = 20000 }
     );
     context.SaveChanges();
 }
@@ -212,7 +170,7 @@ app.MapGet("/Hello", async () => {
 
     await Task.FromResult("Hello World! - API online.");
     
-    }).WithTags("Voos").WithSummary("Verifica��o do status 'Online'").WithOpenApi();
+    }).WithTags("Voos").WithSummary("Verifica��o do status 'Online'").WithOpenApi();
 
 app.MapGet("/voos", async ([FromServices]JornadaMilhasContext context, CancellationToken token = default) => {
     try
@@ -224,10 +182,10 @@ app.MapGet("/voos", async ([FromServices]JornadaMilhasContext context, Cancellat
     catch (OperationCanceledException ex)
     {
 
-        return Results.Problem($"Opera��o cancelada: {ex.Message}");
+        return Results.Problem($"Opera��o cancelada: {ex.Message}");
     }   
 
-}).WithTags("Voos").WithSummary("Lista os v�os cadastrados.").WithOpenApi();
+}).WithTags("Voos").WithSummary("Lista os v�os cadastrados.").WithOpenApi();
 
 app.MapGet("/voos/{id}", async ([FromServices] JornadaMilhasContext context, int id) => {
 
@@ -265,6 +223,51 @@ app.Run();
   </ItemGroup>
 
 </Project>
+
+--- FlightServiceApi/src/Tickets/CompraPassagemRequest.cs ---
+﻿namespace FlightServiceApi.src.Tickets;
+
+public record CompraPassagemRequest
+{
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int Milhas { get; set; }
+}
+
+--- FlightServiceApi/src/Flights/Voo.cs ---
+﻿namespace FlightServiceApi.src.Flights;
+
+public class Voo
+{
+    public int Id { get; set; }
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int Preco { get; set; }
+    public int MilhasNecessarias { get; set; }
+
+    public override string ToString()
+    {
+        return $"Voo {Id} - Origem: {Origem}, Destino: {Destino}, Preço: {Preco}, Milhas Necessárias: {MilhasNecessarias}";
+    }
+}
+
+--- FlightServiceApi/src/Context/JornadaMilhasContext.cs ---
+﻿using FlightServiceApi.src.Flights;
+using Microsoft.EntityFrameworkCore;
+
+namespace FlightServiceApi.src.Context;
+
+public class JornadaMilhasContext:DbContext
+{
+
+    public JornadaMilhasContext(DbContextOptions<JornadaMilhasContext> options):base(options)
+    {
+        
+    }
+
+    public DbSet<Voo> Voos { get; set; }
+
+}
 Estrutura de diretórios de FlightServiceClientApp:
 FlightServiceClientApp
 FlightServiceClientApp/FlightServiceClientApp.csproj
@@ -307,7 +310,7 @@ Conteúdo dos arquivos em FlightServiceClientApp:
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../FlightServiceApi/FlightServiceApi.csproj" />
+    <ProjectReference Include="..\FlightServiceApi\FlightServiceApi.csproj" />
   </ItemGroup>
 
 </Project>
@@ -328,7 +331,10 @@ Conteúdo dos arquivos em FlightServiceClientApp:
 13;Belo Horizonte;Manaus;3200;11000
 14;Curitiba;Goi�nia;1800;8800
 --- FlightServiceClientApp/Program.cs ---
-﻿#region Programação Assíncrona
+﻿using FlightServiceClientApp.src.Flights;
+using FlightServiceClientApp.src.Tickets;
+
+#region Programação Assíncrona
 //object chave = new object();
 //Task<string> conteudoTask;
 //lock(chave)
@@ -381,8 +387,7 @@ Conteúdo dos arquivos em FlightServiceClientApp:
 //Console.ReadKey();
 #endregion
 
-using dotnet_async.Client;
-using dotnet_async.Modelos;
+using FlightServiceClientApp.src.Tickets;
 
 var client = new FlightServiceClient(new JornadaMilhasClientFactory().CreateClient());
 
@@ -423,12 +428,30 @@ async Task ComprarPassagemAsync() { await Task.CompletedTask; }
 await ComprarPassagemAsync();
 --- FlightServiceClientApp/src/Tickets/CompraPassagemRequest.cs ---
 // Original content of CompraPassagemRequest.cs moved here.
+namespace FlightServiceClientApp.src.Tickets;
+
+public record CompraPassagemRequest
+{
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int Milhas { get; set; }
+}
 
 --- FlightServiceClientApp/src/Flights/Voo.cs ---
-// Original content of Voo.cs moved here.
+namespace FlightServiceClientApp.src.Flights;
+
+public class Voo
+{
+    public int Id { get; set; }
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int Milhas { get; set; }
+    public decimal Preco { get; set; }
+}
 
 --- FlightServiceClientApp/src/Flights/FlightServiceClient.cs ---
-using dotnet_async.Modelos;
+using FlightServiceClientApp.src.Flights;
+using FlightServiceClientApp.src.Tickets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -436,7 +459,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace dotnet_async.Flights;
+namespace FlightServiceClientApp.src.Flights;
 public class FlightServiceClient
 {
     private HttpClient client;
@@ -458,18 +481,36 @@ public class FlightServiceClient
 }
 
 --- FlightServiceClientApp/src/Factories/JornadaMilhasClientFactory.cs ---
-// Original content of JornadaMilhasClientFactory.cs moved here.
-
---- FlightServiceClientApp/src/Clients/FlightServiceClient.cs ---
-using dotnet_async.Modelos;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace dotnet_async.Clients;
+public class JornadaMilhasClientFactory : IHttpClientFactory
+{
+    private string url = "http://localhost:5125";
+    public HttpClient CreateClient(string name)
+    {
+        HttpClient client = new HttpClient();
+        client.BaseAddress = new Uri(url);
+        client.DefaultRequestHeaders.Accept.Clear();
+        client.DefaultRequestHeaders.Accept.Add(
+            new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json")
+            ); 
+
+        return client;
+    }
+}
+--- FlightServiceClientApp/src/Clients/FlightServiceClient.cs ---
+using FlightServiceClientApp.src.Flights;
+using FlightServiceClientApp.src.Tickets;
+using System.Net.Http.Json;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace FlightServiceClientApp.src.Clients;
 public class FlightServiceClient
 {
     private HttpClient client;

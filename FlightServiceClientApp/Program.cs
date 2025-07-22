@@ -1,4 +1,7 @@
-﻿#region Programação Assíncrona
+﻿using FlightServiceClientApp.src.Flights;
+using FlightServiceClientApp.src.Tickets;
+
+#region Programação Assíncrona
 //object chave = new object();
 //Task<string> conteudoTask;
 //lock(chave)
@@ -51,8 +54,7 @@
 //Console.ReadKey();
 #endregion
 
-using dotnet_async.Clients;
-using dotnet_async_api.Modelos;
+using FlightServiceClientApp.src.Factories;
 
 var client = new FlightServiceClient(new JornadaMilhasClientFactory().CreateClient());
 
