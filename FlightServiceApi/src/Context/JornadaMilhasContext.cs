@@ -1,4 +1,5 @@
 ﻿using FlightServiceApi.src.Flights;
+using FlightServiceApi.src.Tickets;
 using Microsoft.EntityFrameworkCore;
 
 namespace FlightServiceApi.src.Context;
@@ -12,5 +13,6 @@ public class JornadaMilhasContext:DbContext
     }
 
     public DbSet<Voo> Voos { get; set; }
+    public DbSet<Passagem> Passagens { get; set; }
 
 }

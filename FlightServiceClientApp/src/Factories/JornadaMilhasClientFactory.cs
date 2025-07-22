@@ -5,18 +5,21 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace FlightServiceClientApp.src.Factories;
-public class JornadaMilhasClientFactory : IHttpClientFactory
+
+public class FlightServiceHttpClientFactory
 {
-    private string url = "http://localhost:5125";
-    public HttpClient CreateClient(string name)
+    private const string ApiBaseUrl = "http://localhost:5125";
+
+    public HttpClient CreateClient()
     {
-        HttpClient client = new HttpClient();
-        client.BaseAddress = new Uri(url);
+        var client = new HttpClient
+        {
+            BaseAddress = new Uri(ApiBaseUrl)
+        };
         client.DefaultRequestHeaders.Accept.Clear();
         client.DefaultRequestHeaders.Accept.Add(
             new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json")
-            ); 
-
+        );
         return client;
     }
 }

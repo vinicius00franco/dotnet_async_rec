@@ -9,9 +9,14 @@ FlightServiceApi/Program.cs
 FlightServiceApi/FlightServiceApi.csproj
 FlightServiceApi/src
 FlightServiceApi/src/Tickets
+FlightServiceApi/src/Tickets/Passagem.cs
 FlightServiceApi/src/Tickets/CompraPassagemRequest.cs
+FlightServiceApi/src/Services
+FlightServiceApi/src/Services/RelatorioService.cs
 FlightServiceApi/src/Flights
 FlightServiceApi/src/Flights/Voo.cs
+FlightServiceApi/src/Reports
+FlightServiceApi/src/Reports/Relatorio.cs
 FlightServiceApi/src/Context
 FlightServiceApi/src/Context/JornadaMilhasContext.cs
 
@@ -25,7 +30,8 @@ Conteúdo dos arquivos em FlightServiceApi:
       "Microsoft.AspNetCore": "Warning"
     }
   },
-  "AllowedHosts": "*"
+  "AllowedHosts": "*",
+  "RedisConnectionString": "localhost:6379"
 }
 
 --- FlightServiceApi/Properties/launchSettings.json ---
@@ -90,7 +96,7 @@ GET {{api_host}}/voos
 Accept: application/json
 
 ### Teste 3: Obter um voo específico por ID (voo existente)
-GET {{api_host}}/voos/1
+GET {{api_host}}/voos/2
 Accept: application/json
 
 ### Teste 4: Tentar obter um voo por ID que não existe (espera 404 Not Found)
@@ -130,34 +136,55 @@ Content-Type: application/json
 --- FlightServiceApi/Program.cs ---
 using FlightServiceApi.src.Context;
 using FlightServiceApi.src.Flights;
+using FlightServiceApi.src.Reports;
+using FlightServiceApi.src.Services;
 using FlightServiceApi.src.Tickets;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Runtime.InteropServices;
+using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<JornadaMilhasContext>(options => options.UseInMemoryDatabase("JornadaMilhasVoos"));
+// --- Injeção de Dependência ---
+builder.Services.AddDbContext<JornadaMilhasContext>(options =>
+    options.UseInMemoryDatabase("JornadaMilhasDB_V2"));
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetValue<string>("RedisConnectionString");
+    options.InstanceName = "FlightService_";
+});
+
+builder.Services.AddHttpClient("MilesService", client =>
+{
+    // Em um cenário real, a URL viria do appsettings
+    client.BaseAddress = new Uri("http://localhost:5125");
+});
+
+builder.Services.AddSingleton<RelatorioService>(); // Singleton para manter o estado dos jobs
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// --- Carga de Dados Inicial ---
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<JornadaMilhasContext>();
-
-    // Carga de dados inicial
-    context.Voos.AddRange(
-        new Voo { Id = 1, Origem = "Brasilia", Destino = "Recife", Preco = 2000, MilhasNecessarias = 10000 },
-            new Voo { Id = 2, Origem = "Vit�ria", Destino = "S�o Paulo", Preco = 2500, MilhasNecessarias = 15000 },
-            new Voo { Id = 3, Origem = "Salvador", Destino = "Florian�polis", Preco = 3000, MilhasNecessarias = 20000 }
-    );
-    context.SaveChanges();
+    context.Database.EnsureCreated();
+    if (!context.Voos.Any())
+    {
+        context.Voos.AddRange(
+            new Voo { Id = 1, Origem = "Brasilia", Destino = "Recife", Preco = 2000, MilhasNecessarias = 10000, AssentosDisponiveis = 10 },
+            new Voo { Id = 2, Origem = "Vitória", Destino = "São Paulo", Preco = 2500, MilhasNecessarias = 15000, AssentosDisponiveis = 5 },
+            new Voo { Id = 3, Origem = "Salvador", Destino = "Florianópolis", Preco = 3000, MilhasNecessarias = 20000, AssentosDisponiveis = 0 } // Voo lotado
+        );
+        context.SaveChanges();
+    }
 }
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -166,47 +193,120 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/Hello", async () => {
+// --- Endpoints Aprimorados ---
 
-    await Task.FromResult("Hello World! - API online.");
-    
-    }).WithTags("Voos").WithSummary("Verifica��o do status 'Online'").WithOpenApi();
+#region Voos e Cache com DTO
+app.MapGet("/voos/{id}", async (int id, [FromServices] JornadaMilhasContext context, [FromServices] IDistributedCache cache) =>
+{
+    string cacheKey = $"voo_detalhado:{id}";
+    string? cachedVoo = await cache.GetStringAsync(cacheKey);
 
-app.MapGet("/voos", async ([FromServices]JornadaMilhasContext context, CancellationToken token = default) => {
-    try
+    if (!string.IsNullOrEmpty(cachedVoo))
     {
-        token.ThrowIfCancellationRequested();
-        var voos = await context.Voos.ToListAsync(token);
-        return Results.Ok(voos);
+        Console.WriteLine(">>> DTO do Voo encontrado no cache! <<<");
+        return Results.Ok(JsonSerializer.Deserialize<VooDetalhadoDto>(cachedVoo));
     }
-    catch (OperationCanceledException ex)
-    {
-
-        return Results.Problem($"Opera��o cancelada: {ex.Message}");
-    }   
-
-}).WithTags("Voos").WithSummary("Lista os v�os cadastrados.").WithOpenApi();
-
-app.MapGet("/voos/{id}", async ([FromServices] JornadaMilhasContext context, int id) => {
 
     var voo = await context.Voos.FindAsync(id);
-    if (voo == null)
-    {
-        return Results.NotFound();
-    }
+    if (voo is null) return Results.NotFound();
 
-    return Results.Ok(voo);
+    // Transforma a entidade em DTO
+    var vooDto = new VooDetalhadoDto(voo.Id, $"{voo.Origem}-{voo.Destino}", voo.MilhasNecessarias, voo.AssentosDisponiveis, voo.Status.ToString());
 
-});
+    var options = new DistributedCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromSeconds(30));
+    await cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(vooDto), options);
 
-app.MapPost("/voos/comprar",async([FromServices]JornadaMilhasContext context, [FromBody] CompraPassagemRequest request) =>
+    return Results.Ok(vooDto);
+})
+.WithTags("Voos").WithSummary("Obtém um voo detalhado (com cache de DTO).");
+#endregion
+
+#region Compra com Regras de Negócio
+// Serviço externo simulado
+app.MapPost("/servico-milhas/validar", async ([FromBody] CompraPassagemRequest request) =>
 {
-    var mensagemCompra = $"Passagem comprada origem: {request.Origem} com destino: {request.Destino} com milhas {request.Milhas}";
-    return Results.Ok(await Task.FromResult(mensagemCompra));
+    await Task.Delay(600); // Simula latência de rede
+    if (request.Milhas < 10000)
+        return Results.BadRequest(new { Aprovado = false, Motivo = "Quantidade de milhas insuficiente." });
+    
+    return Results.Ok(new { Aprovado = true, TransacaoId = Guid.NewGuid() });
+}).WithTags("Serviço Externo (Simulado)");
 
-}).WithTags("Voos").WithSummary("Simula a compra de passagem").WithOpenApi();
+app.MapPost("/voos/{vooId}/comprar", async (int vooId, [FromBody] CompraPassagemRequest request, [FromServices] JornadaMilhasContext context, [FromServices] IHttpClientFactory factory) =>
+{
+    var voo = await context.Voos.FindAsync(vooId);
+    if (voo is null) return Results.NotFound("Voo não encontrado.");
+    
+    // Regra de negócio 1: Verificar assentos
+    if (voo.AssentosDisponiveis <= 0) return Results.BadRequest("Voo lotado. Não há assentos disponíveis.");
+    
+    // Regra de negócio 2: Chamar serviço externo de milhas
+    var milesClient = factory.CreateClient("MilesService");
+    var response = await milesClient.PostAsJsonAsync("/servico-milhas/validar", request);
+    
+    if (!response.IsSuccessStatusCode)
+    {
+        var erro = await response.Content.ReadFromJsonAsync<object>();
+        return Results.Problem(detail: $"Falha na validação de milhas: {erro}", statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+    
+    // Regra de negócio 3: Decrementar assento e salvar passagem (operação de escrita)
+    voo.AssentosDisponiveis--;
+    
+    var passagem = new Passagem
+    {
+        VooId = vooId,
+        Origem = voo.Origem,
+        Destino = voo.Destino,
+        MilhasUtilizadas = request.Milhas,
+        DataCompra = DateTime.UtcNow
+    };
+    
+    context.Passagens.Add(passagem);
+    await context.SaveChangesAsync(); // Persiste ambas as alterações (voo e passagem)
+    
+    return Results.Ok(new { Mensagem = "Compra realizada com sucesso!", PassagemId = passagem.Id });
+})
+.WithTags("Voos").WithSummary("Compra uma passagem com validação de assentos e milhas.");
+#endregion
+
+#region Geração de Relatórios Assíncrona
+app.MapPost("/relatorios/voos", (RelatorioService relatorioService) =>
+{
+    var relatorio = relatorioService.SolicitarRelatorioDeVoos();
+    // Retorna 202 Accepted com a localização para consultar o status
+    return Results.Accepted($"/relatorios/{relatorio.Id}");
+})
+.WithTags("Relatórios").WithSummary("Solicita a geração de um relatório de voos.");
+
+app.MapGet("/relatorios/{id}", (Guid id, RelatorioService relatorioService) =>
+{
+    var status = relatorioService.GetStatus(id);
+    return status is null ? Results.NotFound() : Results.Ok(status);
+})
+.WithTags("Relatórios").WithSummary("Verifica o status da geração de um relatório.");
+
+app.MapGet("/relatorios/{id}/download", (Guid id, RelatorioService relatorioService) =>
+{
+    var relatorio = relatorioService.GetStatus(id);
+    if (relatorio is null || relatorio.Status != StatusRelatorio.Concluido)
+    {
+        return Results.NotFound("Relatório não encontrado ou ainda não concluído.");
+    }
+    
+    var filePath = Path.Combine("Reports", $"{id}.csv");
+    if (!File.Exists(filePath))
+    {
+        return Results.NotFound("Arquivo do relatório não encontrado.");
+    }
+    
+    return Results.File(filePath, "text/csv", $"relatorio_voos_{id}.csv");
+})
+.WithTags("Relatórios").WithSummary("Baixa o relatório concluído.");
+#endregion
 
 app.Run();
+
 --- FlightServiceApi/FlightServiceApi.csproj ---
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
@@ -219,10 +319,25 @@ app.Run();
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
   </ItemGroup>
 
 </Project>
+
+--- FlightServiceApi/src/Tickets/Passagem.cs ---
+namespace FlightServiceApi.src.Tickets;
+
+public class Passagem
+{
+    public int Id { get; set; }
+    public int VooId { get; set; } // Referência ao voo
+    public string? Origem { get; set; }
+    public string? Destino { get; set; }
+    public int MilhasUtilizadas { get; set; }
+    public DateTime DataCompra { get; set; }
+    public string Status { get; set; } = "Confirmada";
+}
 
 --- FlightServiceApi/src/Tickets/CompraPassagemRequest.cs ---
 ﻿namespace FlightServiceApi.src.Tickets;
@@ -234,8 +349,86 @@ public record CompraPassagemRequest
     public int Milhas { get; set; }
 }
 
+--- FlightServiceApi/src/Services/RelatorioService.cs ---
+using FlightServiceApi.src.Context;
+using FlightServiceApi.src.Reports;
+using Microsoft.EntityFrameworkCore;
+using System.Text;
+
+namespace FlightServiceApi.src.Services;
+
+public class RelatorioService
+{
+    private static readonly Dictionary<Guid, Relatorio> _jobs = new();
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public RelatorioService(IServiceScopeFactory scopeFactory)
+    {
+        _scopeFactory = scopeFactory;
+    }
+
+    public Relatorio SolicitarRelatorioDeVoos()
+    {
+        var relatorio = new Relatorio();
+        _jobs[relatorio.Id] = relatorio;
+
+        Task.Run(() => GerarRelatorio(relatorio.Id));
+
+        return relatorio;
+    }
+
+    public Relatorio? GetStatus(Guid id)
+    {
+        _jobs.TryGetValue(id, out var relatorio);
+        return relatorio;
+    }
+
+    private async Task GerarRelatorio(Guid id)
+    {
+        var relatorio = _jobs[id];
+        relatorio.Status = StatusRelatorio.Processando;
+
+        try
+        {
+            await Task.Delay(5000);
+
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<JornadaMilhasContext>();
+            var voos = await context.Voos.AsNoTracking().ToListAsync();
+
+            var builder = new StringBuilder();
+            builder.AppendLine("Id;Origem;Destino;AssentosDisponiveis;Status");
+            foreach (var voo in voos)
+            {
+                builder.AppendLine($"{voo.Id};{voo.Origem};{voo.Destino};{voo.AssentosDisponiveis};{voo.Status}");
+            }
+
+            var reportPath = Path.Combine("Reports", $"{id}.csv");
+            Directory.CreateDirectory("Reports");
+            await File.WriteAllTextAsync(reportPath, builder.ToString());
+
+            relatorio.Status = StatusRelatorio.Concluido;
+            relatorio.ConcluidoEm = DateTime.UtcNow;
+            relatorio.UrlDownload = $"/relatorios/{id}/download";
+        }
+        catch (Exception ex)
+        {
+            relatorio.Status = StatusRelatorio.Falha;
+            relatorio.Erro = ex.Message;
+        }
+    }
+}
+
 --- FlightServiceApi/src/Flights/Voo.cs ---
 ﻿namespace FlightServiceApi.src.Flights;
+
+public enum StatusVoo
+{
+    Programado,
+    Confirmado,
+    Atrasado,
+    Cancelado
+}
 
 public class Voo
 {
@@ -244,6 +437,8 @@ public class Voo
     public string? Destino { get; set; }
     public int Preco { get; set; }
     public int MilhasNecessarias { get; set; }
+    public int AssentosDisponiveis { get; set; } // Nova propriedade
+    public StatusVoo Status { get; set; } = StatusVoo.Programado; // Nova propriedade
 
     public override string ToString()
     {
@@ -251,8 +446,33 @@ public class Voo
     }
 }
 
+// DTO para o cache e para a resposta do endpoint de detalhe
+public record VooDetalhadoDto(int Id, string Rota, int Milhas, int Assentos, string Status);
+
+--- FlightServiceApi/src/Reports/Relatorio.cs ---
+namespace FlightServiceApi.src.Reports;
+
+public enum StatusRelatorio
+{
+    Pendente,
+    Processando,
+    Concluido,
+    Falha
+}
+
+public class Relatorio
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public DateTime SolicitadoEm { get; set; } = DateTime.UtcNow;
+    public DateTime? ConcluidoEm { get; set; }
+    public StatusRelatorio Status { get; set; } = StatusRelatorio.Pendente;
+    public string? UrlDownload { get; set; }
+    public string? Erro { get; set; }
+}
+
 --- FlightServiceApi/src/Context/JornadaMilhasContext.cs ---
 ﻿using FlightServiceApi.src.Flights;
+using FlightServiceApi.src.Tickets;
 using Microsoft.EntityFrameworkCore;
 
 namespace FlightServiceApi.src.Context;
@@ -266,6 +486,7 @@ public class JornadaMilhasContext:DbContext
     }
 
     public DbSet<Voo> Voos { get; set; }
+    public DbSet<Passagem> Passagens { get; set; }
 
 }
 Estrutura de diretórios de FlightServiceClientApp:
@@ -283,6 +504,8 @@ FlightServiceClientApp/src/Factories
 FlightServiceClientApp/src/Factories/JornadaMilhasClientFactory.cs
 FlightServiceClientApp/src/Clients
 FlightServiceClientApp/src/Clients/FlightServiceClient.cs
+FlightServiceClientApp/src/Models
+FlightServiceClientApp/src/Models/Dtos.cs
 
 Conteúdo dos arquivos em FlightServiceClientApp:
 
@@ -295,13 +518,6 @@ Conteúdo dos arquivos em FlightServiceClientApp:
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Include="src/Controllers/**/*.cs" />
-    <Compile Include="src/Services/**/*.cs" />
-    <Compile Include="src/Repositories/**/*.cs" />
-    <Compile Include="src/Models/**/*.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <None Update="voos.txt">
@@ -331,110 +547,94 @@ Conteúdo dos arquivos em FlightServiceClientApp:
 13;Belo Horizonte;Manaus;3200;11000
 14;Curitiba;Goi�nia;1800;8800
 --- FlightServiceClientApp/Program.cs ---
-﻿using FlightServiceClientApp.src.Flights;
-using FlightServiceClientApp.src.Tickets;
+using FlightServiceClientApp.src.Clients;
+using FlightServiceClientApp.src.Factories;
+using FlightServiceClientApp.src.Models;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 
-#region Programação Assíncrona
-//object chave = new object();
-//Task<string> conteudoTask;
-//lock(chave)
-//{
-//    conteudoTask = Task.Run(() => File.ReadAllTextAsync("voos.txt"));
-//}
-//async Task LerArquivoAsync(CancellationToken token)
-//{
-//    try
-//    {
-//        await Task.Delay(new Random().Next(300, 8000));
-//        token.ThrowIfCancellationRequested();
-//        Console.WriteLine($"Conteúdo: \n{conteudoTask.Result}");
+var factory = new JornadaMilhasClientFactory();
+var client = new FlightServiceClient(factory.CreateClient("FlightService"));
 
-//    }
-//    catch (OperationCanceledException ex)
-//    {
-//       Console.WriteLine($"Tarefa cancelada: {ex.Message}");
-//    }
-//    catch (AggregateException ex)
-//    {
-//        Console.WriteLine($"Aconteceu o erro: {ex.InnerException.Message}");
-//    }
+Console.WriteLine("--- INICIANDO SIMULAÇÕES AVANÇADAS ---");
 
-//}
+// --- Cenário 1: Cache com DTO ---
+Console.WriteLine("\n--- Testando Cache com DTO (Voo ID 1) ---");
+Console.WriteLine("1ª Chamada (deve vir do DB e criar DTO):");
+var dto1 = await client.GetFlightDetailsAsync(1);
+Console.WriteLine(dto1 != null ? $"Recebido: {dto1}" : "Voo não encontrado.");
 
-//async Task ExibirRelatorioAsync(CancellationToken token)
-//{
-//	try
-//	{
-//        Console.WriteLine("Executando relatório de compra de passagens!");
-//        await Task.Delay(new Random().Next(300, 8000));
-//        token.ThrowIfCancellationRequested();
-//    }
-//	catch(OperationCanceledException ex)
-//	{
+Console.WriteLine("\n2ª Chamada (deve vir do Cache da API):");
+var dto2 = await client.GetFlightDetailsAsync(1);
+Console.WriteLine(dto2 != null ? $"Recebido: {dto2}" : "Voo não encontrado.");
 
-//        Console.WriteLine($"Tarefa cancelada: {ex.Message}");
-//	}
+// --- Cenário 2: Compra com Regras de Negócio ---
+Console.WriteLine("\n--- Testando Compra com Regras de Negócio ---");
+Console.WriteLine("\nTentativa 1: Comprar passagem em voo lotado (ID 3)...");
+var compraLotado = await client.PurchaseTicketAsync(3, new CompraPassagemRequest("Salvador", "Florianópolis", 20000));
+Console.WriteLine(compraLotado);
 
-//}
+Console.WriteLine("\nTentativa 2: Comprar passagem com milhas insuficientes (Voo ID 1)...");
+var compraMilhasInsuficientes = await client.PurchaseTicketAsync(1, new CompraPassagemRequest("Brasilia", "Recife", 5000));
+Console.WriteLine(compraMilhasInsuficientes);
 
-//CancellationTokenSource tokenDeCancelamento = new CancellationTokenSource();
+Console.WriteLine("\nTentativa 3: Compra com sucesso (Voo ID 2)...");
+var compraSucesso = await client.PurchaseTicketAsync(2, new CompraPassagemRequest("Vitória", "São Paulo", 15000));
+Console.WriteLine(compraSucesso);
 
-//Task tarefa= Task.WhenAll(LerArquivoAsync(tokenDeCancelamento.Token), ExibirRelatorioAsync(tokenDeCancelamento.Token));
-
-//await Task.Delay(1000).ContinueWith(_ => tokenDeCancelamento.Cancel());
-
-//Console.WriteLine("Outras operações.");
-//Console.ReadKey();
-#endregion
-
-using FlightServiceClientApp.src.Tickets;
-
-var client = new FlightServiceClient(new JornadaMilhasClientFactory().CreateClient());
-
-async Task ProcessarConsultasDeVoosAsync()
+// --- Cenário 3: Geração de Relatório Assíncrona com Polling ---
+Console.WriteLine("\n--- Testando Geração de Relatório Assíncrona ---");
+string? statusUrl = await client.RequestReportAsync();
+if (statusUrl is null)
 {
-    try
-    {
-        CancellationTokenSource tokenSource = new CancellationTokenSource();
-
-        tokenSource.Cancel();
-
-        var voos = await client.GetFlightsAsync(tokenSource.Token);
-
-        foreach (var voo in voos)
-        {
-            Console.WriteLine(voo);
-        }
-    }
-    catch (Exception ex)
-    {
-
-        Console.WriteLine($"tarefa cancelada: {ex.Message}");
-    }
-    
+    Console.WriteLine("Falha ao solicitar o relatório.");
+    return;
 }
 
-await ProcessarConsultasDeVoosAsync();
-
-async Task ComprarPassagemAsync() { await Task.CompletedTask; }
+Console.WriteLine($"Relatório solicitado. Verificando status em: {statusUrl}");
+RelatorioStatus? status;
+while (true)
 {
-    var compraPassagemRequest = new CompraPassagemRequest() {Origem="Vitória",Destino="Belém",Milhas =1000 };
+    status = await client.GetReportStatusAsync(statusUrl);
+    Console.WriteLine($"Status do relatório ({status?.Id}): {status?.Status}");
 
-    var resultado = client.PurchaseTicketAsync(compraPassagemRequest);
-
-    Console.WriteLine(resultado.Result);
+    if (status?.Status == "Concluido" || status?.Status == "Falha")
+    {
+        break;
+    }
+    await Task.Delay(1000); // Espera 1 segundo antes de verificar novamente
 }
 
-await ComprarPassagemAsync();
+if (status?.Status == "Concluido" && status.UrlDownload is not null)
+{
+    string savePath = "relatorio_final.csv";
+    Console.WriteLine($"Relatório concluído! Baixando de {status.UrlDownload}...");
+    await client.DownloadReportAsync(status.UrlDownload, savePath);
+    Console.WriteLine($"Relatório salvo em: {Path.GetFullPath(savePath)}");
+    File.Delete(savePath); // Limpa o arquivo
+}
+else
+{
+    Console.WriteLine($"Geração do relatório falhou: {status?.Erro}");
+}
+
+Console.WriteLine("\n--- Simulações Concluídas ---");
+
 --- FlightServiceClientApp/src/Tickets/CompraPassagemRequest.cs ---
-// Original content of CompraPassagemRequest.cs moved here.
 namespace FlightServiceClientApp.src.Tickets;
 
-public record CompraPassagemRequest
+public record CompraPassagemRequest(string Origem, string Destino, int Milhas);
+
+public class Passagem
 {
+    public int Id { get; set; }
+    public int VooId { get; set; }
     public string? Origem { get; set; }
     public string? Destino { get; set; }
-    public int Milhas { get; set; }
+    public int MilhasUtilizadas { get; set; }
+    public DateTime DataCompra { get; set; }
+    public string Status { get; set; } = "Confirmada";
 }
 
 --- FlightServiceClientApp/src/Flights/Voo.cs ---
@@ -445,8 +645,10 @@ public class Voo
     public int Id { get; set; }
     public string? Origem { get; set; }
     public string? Destino { get; set; }
-    public int Milhas { get; set; }
-    public decimal Preco { get; set; }
+    public int Preco { get; set; }
+    public int MilhasNecessarias { get; set; }
+    public int AssentosDisponiveis { get; set; }
+    public string Status { get; set; } = "Programado";
 }
 
 --- FlightServiceClientApp/src/Flights/FlightServiceClient.cs ---
@@ -487,46 +689,94 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace dotnet_async.Clients;
-public class JornadaMilhasClientFactory : IHttpClientFactory
+namespace FlightServiceClientApp.src.Factories;
+
+public class FlightServiceHttpClientFactory
 {
-    private string url = "http://localhost:5125";
-    public HttpClient CreateClient(string name)
+    private const string ApiBaseUrl = "http://localhost:5125";
+
+    public HttpClient CreateClient()
     {
-        HttpClient client = new HttpClient();
-        client.BaseAddress = new Uri(url);
+        var client = new HttpClient
+        {
+            BaseAddress = new Uri(ApiBaseUrl)
+        };
         client.DefaultRequestHeaders.Accept.Clear();
         client.DefaultRequestHeaders.Accept.Add(
             new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json")
-            ); 
-
+        );
         return client;
     }
 }
 --- FlightServiceClientApp/src/Clients/FlightServiceClient.cs ---
-using FlightServiceClientApp.src.Flights;
-using FlightServiceClientApp.src.Tickets;
+using FlightServiceClientApp.src.Models;
 using System.Net.Http.Json;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FlightServiceClientApp.src.Clients;
+
+// Definindo os DTOs que o cliente espera receber
+public record VooDetalhadoDto(int Id, string Rota, int Milhas, int Assentos, string Status);
+public record RelatorioStatus(Guid Id, string Status, string? UrlDownload, string? Erro);
+
 public class FlightServiceClient
 {
-    private HttpClient client;
+    private readonly HttpClient _client;
+
     public FlightServiceClient(HttpClient client)
     {
-        this.client = client;
+        _client = client;
     }
 
-    public async Task<IEnumerable<Voo>> GetFlightsAsync(CancellationToken token=default)
+    public async Task<VooDetalhadoDto?> GetFlightDetailsAsync(int id)
     {
-        HttpResponseMessage response = await client.GetAsync("/Voos",token);
-        return await response.Content.ReadFromJsonAsync<IEnumerable<Voo>>() ?? Enumerable.Empty<Voo>();
+        try
+        {
+            return await _client.GetFromJsonAsync<VooDetalhadoDto>($"/voos/{id}");
+        }
+        catch (HttpRequestException)
+        {
+            return null; // Retorna nulo se o voo não for encontrado (404)
+        }
     }
 
-    public async Task<string> PurchaseTicketAsync(CompraPassagemRequest request)
+    public async Task<string> PurchaseTicketAsync(int vooId, CompraPassagemRequest request)
     {
-        return await client.PostAsJsonAsync("/Voos/comprar", request).Result.Content.ReadFromJsonAsync<string>() ?? string.Empty;
+        var response = await _client.PostAsJsonAsync($"/voos/{vooId}/comprar", request);
+        var content = await response.Content.ReadAsStringAsync();
+        return $"Status: {response.StatusCode}, Resposta: {content}";
+    }
+
+    public async Task<string?> RequestReportAsync()
+    {
+        var response = await _client.PostAsync("/relatorios/voos", null);
+        if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
+        {
+            // Retorna a URL de status do header "Location"
+            return response.Headers.Location?.OriginalString;
+        }
+        return null;
+    }
+
+    public async Task<RelatorioStatus?> GetReportStatusAsync(string statusUrl)
+    {
+        return await _client.GetFromJsonAsync<RelatorioStatus>(statusUrl);
+    }
+
+    public async Task DownloadReportAsync(string downloadUrl, string savePath)
+    {
+        var fileBytes = await _client.GetByteArrayAsync(downloadUrl);
+        await File.WriteAllBytesAsync(savePath, fileBytes);
     }
 }
+
+--- FlightServiceClientApp/src/Models/Dtos.cs ---
+namespace FlightServiceClientApp.src.Models;
+
+// DTO para receber os detalhes de um voo da API
+public record VooDetalhadoDto(int Id, string Rota, int Milhas, int Assentos, string Status);
+
+// DTO para enviar uma requisição de compra de passagem
+public record CompraPassagemRequest(string Origem, string Destino, int Milhas);
+
+// DTO para receber o status de um relatório
+public record RelatorioStatus(Guid Id, string Status, string? UrlDownload, string? Erro);

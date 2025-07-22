@@ -8,13 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="src/Controllers/**/*.cs" />
-    <Compile Include="src/Services/**/*.cs" />
-    <Compile Include="src/Repositories/**/*.cs" />
-    <Compile Include="src/Models/**/*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="voos.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
